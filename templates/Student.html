@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bisaya Tongue | Learning Lab</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+
+        body {
+            background-color: #2b6092;
+            font-family: 'Inter', sans-serif;
+            margin: 0;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        /* --- SIDEBAR --- */
+        #sidebar {
+            position: fixed;
+            top: 0; left: -320px;
+            width: 300px; height: 100%;
+            background: #1a3a5a;
+            z-index: 100;
+            transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 10px 0 30px rgba(0,0,0,0.5);
+            color: white;
+        }
+        #sidebar.open { left: 0; }
+
+        .overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0,0,0,0.5);
+            display: none;
+            z-index: 90;
+        }
+        .overlay.show { display: block; }
+
+        .menu-trigger {
+            position: absolute;
+            top: 20px; left: 20px;
+            font-size: 2.5rem;
+            cursor: pointer;
+            z-index: 80;
+            color: #000;
+        }
+
+        /* --- PRACTICE CARD & MIC --- */
+        .practice-card {
+            background: #165a7a;
+            border: 2px solid #000;
+            border-radius: 60px;
+            width: 340px; height: 480px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .mic-circle {
+            background: #2b6092;
+            border: 4px solid #000;
+            width: 150px; height: 150px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 4rem;
+            color: #000;
+            cursor: pointer;
+            transition: all 0.15s ease-out;
+            outline: none;
+            position: relative;
+            box-shadow: 0 10px 0px #1a3a5a;
+        }
+
+        .mic-circle:active {
+            transform: translateY(5px);
+            box-shadow: 0 5px 0px #1a3a5a;
+        }
+
+        .mic-circle.recording {
+            background: #ef4444;
+            color: white;
+            border-color: white;
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.6);
+        }
+
+        .mic-circle.recording::before,
+        .mic-circle.recording::after {
+            content: '';
+            position: absolute;
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            border: 2px solid #ef4444;
+            animation: ripple 1.2s infinite ease-out;
+            opacity: 0;
+        }
+
+        .mic-circle.recording::after { animation-delay: 0.6s; }
+
+        @keyframes ripple {
+            0% { transform: scale(1); opacity: 0.8; }
+            100% { transform: scale(1.8); opacity: 0; }
+        }
+
+        .status-badge {
+            background: #facc15;
+            padding: 4px 15px;
+            border-radius: 20px;
+            font-weight: 800;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            margin-bottom: 10px;
+            display: inline-block;
+        }
+
+        .info-text { font-size: 1.1rem; font-weight: 500; margin-bottom: 4px; color: #000; }
+        .bold-val { font-weight: 800; }
+
+        @keyframes bounceIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            70% { transform: scale(1.05); opacity: 1; }
+            100% { transform: scale(1); }
+        }
+        .final-card-anim { animation: bounceIn 0.6s ease-out forwards; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <div class="p-8 border-b border-white/10">
+            <h2 class="text-xl font-extrabold italic uppercase">Bisaya Tongue</h2>
+            <p class="text-cyan-400 font-bold mt-1">@{{ user }}</p>
+        </div>
+        <nav class="mt-4 p-4 space-y-2">
+            <div class="bg-white/5 p-4 rounded-xl">
+                <p class="text-xs text-slate-400 uppercase font-black">Pre-test Avg</p>
+                <p id="pre-score" class="font-bold text-xl">0%</p>
+            </div>
+            <div class="bg-white/5 p-4 rounded-xl">
+                <p class="text-xs text-slate-400 uppercase font-black">Latest Accuracy</p>
+                <p id="curr-acc" class="font-bold text-xl">0%</p>
+            </div>
+            <a href="/logout" class="block p-4 text-red-400 hover:bg-red-500/10 rounded-xl mt-10 transition">
+                <i class="fas fa-power-off mr-3"></i> Logout Session
+            </a>
+        </nav>
+    </div>
+
+    <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>
+    <div class="menu-trigger" onclick="toggleSidebar()"><i class="fas fa-bars"></i></div>
+
+    <main id="main-content" class="w-full h-full pt-10 flex flex-col items-center">
+        <div id="phase-badge" class="status-badge">Initializing...</div>
+
+        <div id="info-panel" class="mb-8 text-center">
+            <p class="info-text">Level: <span id="lvl-name" class="bold-val">---</span></p>
+            <p class="info-text">Target: <span id="target" class="bold-val">---</span></p>
+            <p class="info-text">Hint: <span id="hint" class="bold-val">---</span></p>
+            <p class="info-text">AI Accuracy: <span id="acc-display" class="bold-val text-red-700">0%</span></p>
+        </div>
+
+        <div id="ui-practice" class="practice-card">
+            <div id="feedback" class="h-6 text-yellow-300 font-bold mb-4 uppercase text-xs tracking-widest text-center px-4"></div>
+            <button id="mic" class="mic-circle"><i class="fas fa-microphone"></i></button>
+            <p id="instruction" class="mt-10 text-xs uppercase font-black tracking-[0.3em] text-slate-300 transition-all">Hold to Speak</p>
+        </div>
+    </main>
+
+    <script>
+        const USER_ID = "{{ user }}";
+        const KEY = `bisaya_v3_${USER_ID}`;
+
+        const modules = [
+            { name: "Foundation: Vowels", words: ["A", "E", "I", "O", "U"], hints: ["ah", "eh", "ee", "oh", "owh"] },
+            { name: "Level 1: Mga Kolor", words: ["Pula", "Asul", "Dalag", "Berde", "Puti"], hints: ["Red", "Blue", "Yellow", "Green", "White"] },
+            { name: "Level 2: Mga Hayop", words: ["Iro", "Iring", "Manok", "Baka", "Baboy"], hints: ["Dog", "Cat", "Chicken", "Cow", "Pig"] },
+            { name: "Level 3: Bahin sa Lawas", words: ["Ulo", "Kamot", "Tuhod", "Tiil", "Dunggan"], hints: ["Head", "Hand", "Knee", "Foot", "Ear"] }
+        ];
+
+        let state = JSON.parse(localStorage.getItem(KEY)) || {
+            curMod: 0, curIdx: 0, phase: 'pretest',
+            preTestData: [], postTestData: [],
+            preAvg: 0, postAvg: 0,
+            testItems: []
+        };
+
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('open');
+            document.getElementById('overlay').classList.toggle('show');
+            document.getElementById('pre-score').innerText = state.preAvg + "%";
+        }
+
+        function generateTestItems() {
+            let pool = [];
+            modules.forEach(m => pool.push(...m.words));
+            return pool.sort(() => 0.5 - Math.random()).slice(0, 10);
+        }
+
+        function updateUI() {
+            const badge = document.getElementById('phase-badge');
+
+            if (state.phase === 'pretest') {
+                badge.innerText = "Pre-test (Diagnostic)";
+                badge.style.background = "#facc15";
+                if (!state.testItems || state.testItems.length === 0) state.testItems = generateTestItems();
+                document.getElementById('lvl-name').innerText = `Diagnostic ${state.curIdx + 1}/10`;
+                document.getElementById('target').innerText = state.testItems[state.curIdx];
+                document.getElementById('hint').innerText = "Speak the word";
+            }
+            else if (state.phase === 'posttest') {
+                badge.innerText = "Post-test (Final)";
+                badge.style.background = "#22c55e";
+                document.getElementById('lvl-name').innerText = `Final Exam ${state.curIdx + 1}/10`;
+                document.getElementById('target').innerText = state.testItems[state.curIdx];
+                document.getElementById('hint').innerText = "Final verification";
+            }
+            else {
+                badge.innerText = "Learning Mode";
+                badge.style.background = "#fff";
+                let m = modules[state.curMod];
+                document.getElementById('lvl-name').innerText = m.name;
+                document.getElementById('target').innerText = m.words[state.curIdx];
+                document.getElementById('hint').innerText = m.hints[state.curIdx];
+            }
+
+            document.getElementById('pre-score').innerText = state.preAvg + "%";
+            localStorage.setItem(KEY, JSON.stringify(state));
+        }
+
+        function showFinalSummary() {
+            const mainArea = document.getElementById('main-content');
+            const improvement = state.postAvg - state.preAvg;
+            const growthText = improvement >= 0 ? `+${improvement}% Improvement` : `${improvement}% Score Change`;
+
+            mainArea.innerHTML = `
+                <div class="final-card-anim bg-[#165a7a] border-4 border-black p-8 rounded-[40px] text-center shadow-2xl max-w-sm mx-auto mt-10">
+                    <div class="text-5xl mb-4">🏆</div>
+                    <h1 class="text-3xl font-black text-white uppercase leading-tight">Mastery achieved</h1>
+                    <p class="text-cyan-300 font-bold mb-6 italic">Course Report for ${USER_ID}</p>
+
+                    <div class="space-y-4 mb-6">
+                        <div class="bg-black/20 p-4 rounded-2xl border border-white/10">
+                            <p class="text-[10px] uppercase font-black text-slate-400">Initial Diagnostic</p>
+                            <p class="text-2xl font-black text-white">${state.preAvg}%</p>
+                        </div>
+                        <div class="bg-black/20 p-4 rounded-2xl border-2 border-yellow-400">
+                            <p class="text-[10px] uppercase font-black text-yellow-400">Final Proficiency</p>
+                            <p class="text-5xl font-black text-white">${state.postAvg}%</p>
+                        </div>
+                    </div>
+
+                    <p class="text-xs font-black uppercase text-green-400 tracking-widest mb-8">${growthText}</p>
+
+                    <button onclick="localStorage.removeItem('${KEY}'); location.reload();"
+                        class="w-full py-4 bg-white text-[#165a7a] rounded-2xl font-black uppercase hover:bg-yellow-400 transition-all active:scale-95 shadow-lg">
+                        Restart Course
+                    </button>
+                </div>
+            `;
+        }
+
+        async function handleResult(data) {
+            const acc = data.accuracy;
+            document.getElementById('acc-display').innerText = acc + "%";
+            document.getElementById('curr-acc').innerText = acc + "%";
+
+            // Global minimum threshold to show any feedback
+            if (acc < 30) {
+                document.getElementById('feedback').innerText = "Not quite! Try again.";
+                return;
+            }
+
+            // --- PHASE: PRE-TEST (Baseline) ---
+            if (state.phase === 'pretest') {
+                state.preTestData.push(acc);
+                state.curIdx++;
+                document.getElementById('feedback').innerText = "Recorded!";
+                if (state.curIdx >= 10) {
+                    state.preAvg = Math.round(state.preTestData.reduce((a,b)=>a+b)/10);
+                    state.phase = 'learning';
+                    state.curMod = 0;
+                    state.curIdx = 0;
+                    alert(`Diagnostic complete! Baseline: ${state.preAvg}%`);
+                }
+            }
+
+            // --- PHASE: LEARNING (Strict 70%) ---
+            else if (state.phase === 'learning') {
+                if (acc >= 70) {
+                    document.getElementById('feedback').innerText = "Good job!";
+                    state.curIdx++;
+                    if (state.curIdx >= modules[state.curMod].words.length) {
+                        state.curIdx = 0;
+                        state.curMod++;
+                    }
+                    if (state.curMod >= modules.length) {
+                        state.phase = 'posttest';
+                        state.curIdx = 0;
+                        state.testItems = generateTestItems();
+                        alert("Levels complete! Starting the strict Final Post-test.");
+                    }
+                } else {
+                    document.getElementById('feedback').innerText = "Close! Aim for 70%+ to advance.";
+                    return;
+                }
+            }
+
+            // --- PHASE: POST-TEST (STRICT 70%) ---
+            else if (state.phase === 'posttest') {
+                if (acc >= 70) {
+                    document.getElementById('feedback').innerText = "Word Mastered!";
+                    state.postTestData.push(acc);
+                    state.curIdx++;
+
+                    if (state.curIdx >= 10) {
+                        state.postAvg = Math.round(state.postTestData.reduce((a,b)=>a+b)/10);
+
+                        if (state.postAvg < 50) {
+                            alert(`Post-test Average: ${state.postAvg}%. Returning to practice.`);
+                            state.phase = 'learning';
+                            state.curMod = 1;
+                            state.curIdx = 0;
+                            state.postTestData = [];
+                            state.testItems = [];
+                        } else {
+                            showFinalSummary();
+                            return;
+                        }
+                    }
+                } else {
+                    document.getElementById('feedback').innerText = "Accuracy too low for Final Exam. Aim for 70%+";
+                    return;
+                }
+            }
+
+            updateUI();
+        }
+
+        // --- MIC INTERACTIVITY ---
+        const micBtn = document.getElementById('mic');
+        const instruction = document.getElementById('instruction');
+        let mediaRec;
+
+        const startRecording = async () => {
+            micBtn.classList.add('recording');
+            instruction.innerText = "Listening...";
+            instruction.style.color = "#ef4444";
+            document.getElementById('feedback').innerText = "";
+
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRec = new MediaRecorder(stream);
+                let chunks = [];
+                mediaRec.ondataavailable = e => chunks.push(e.data);
+                mediaRec.onstop = async () => {
+                    const blob = new Blob(chunks, { type: 'audio/wav' });
+                    const fd = new FormData();
+                    let target = (state.phase === 'learning') ? modules[state.curMod].words[state.curIdx] : state.testItems[state.curIdx];
+
+                    fd.append('audio', blob);
+                    fd.append('target', target);
+                    fd.append('test_type', state.phase);
+
+                    document.getElementById('feedback').innerText = "Processing...";
+                    const res = await fetch('/analyze', { method: 'POST', body: fd });
+                    handleResult(await res.json());
+                };
+                mediaRec.start();
+            } catch (e) {
+                alert("Microphone required.");
+                stopRecording();
+            }
+        };
+
+        const stopRecording = () => {
+            micBtn.classList.remove('recording');
+            instruction.innerText = "Hold to Speak";
+            instruction.style.color = "#cbd5e1";
+            if(mediaRec && mediaRec.state === "recording") mediaRec.stop();
+        };
+
+        micBtn.onmousedown = startRecording;
+        window.onmouseup = stopRecording;
+        micBtn.ontouchstart = (e) => { e.preventDefault(); startRecording(); };
+        micBtn.ontouchend = (e) => { e.preventDefault(); stopRecording(); };
+
+        updateUI();
+    </script>
+</body>
+</html>
+<!--<!DOCTYPE html>-->
+<!--<html lang="en">-->
+<!--<head>-->
+<!--    <meta charset="UTF-8">-->
+<!--    <meta name="viewport" content="width=device-width, initial-scale=1.0">-->
+<!--    <title>Bisaya Tongue | Learning Lab</title>-->
+
+<!--    <script src="https://cdn.tailwindcss.com"></script>-->
+<!--   <link rel="manifest" href="{{ url_for('static', filename='manifest.json') }}">-->
+<!--    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">-->
+
+<!--    <style>-->
+<!--        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');-->
+
+<!--        body {-->
+<!--            background-color: #2b6092;-->
+<!--            font-family: 'Inter', sans-serif;-->
+<!--            margin: 0;-->
+<!--            overflow: hidden;-->
+<!--            height: 100vh;-->
+<!--        }-->
+
+<!--        /* -&#45;&#45; SIDEBAR -&#45;&#45; */-->
+<!--        #sidebar {-->
+<!--            position: fixed;-->
+<!--            top: 0; left: -320px;-->
+<!--            width: 300px; height: 100%;-->
+<!--            background: #1a3a5a;-->
+<!--            z-index: 100;-->
+<!--            transition: 0.3s cubic-bezier(0.4, 0, 0.2, 1);-->
+<!--            box-shadow: 10px 0 30px rgba(0,0,0,0.5);-->
+<!--            color: white;-->
+<!--        }-->
+<!--        #sidebar.open { left: 0; }-->
+
+<!--        .overlay {-->
+<!--            position: fixed;-->
+<!--            top: 0; left: 0;-->
+<!--            width: 100%; height: 100%;-->
+<!--            background: rgba(0,0,0,0.5);-->
+<!--            display: none;-->
+<!--            z-index: 90;-->
+<!--        }-->
+<!--        .overlay.show { display: block; }-->
+
+<!--        .menu-trigger {-->
+<!--            position: absolute;-->
+<!--            top: 20px; left: 20px;-->
+<!--            font-size: 2.5rem;-->
+<!--            cursor: pointer;-->
+<!--            z-index: 80;-->
+<!--            color: #000;-->
+<!--        }-->
+
+<!--        /* -&#45;&#45; PRACTICE CARD & MIC -&#45;&#45; */-->
+<!--        .practice-card {-->
+<!--            background: #165a7a;-->
+<!--            border: 2px solid #000;-->
+<!--            border-radius: 60px;-->
+<!--            width: 340px; height: 480px;-->
+<!--            display: flex;-->
+<!--            flex-direction: column;-->
+<!--            align-items: center;-->
+<!--            justify-content: center;-->
+<!--            margin: 0 auto;-->
+<!--            box-shadow: 0 20px 40px rgba(0,0,0,0.3);-->
+<!--        }-->
+
+<!--        .mic-circle {-->
+<!--            background: #2b6092;-->
+<!--            border: 4px solid #000;-->
+<!--            width: 150px; height: 150px;-->
+<!--            border-radius: 50%;-->
+<!--            display: flex;-->
+<!--            align-items: center;-->
+<!--            justify-content: center;-->
+<!--            font-size: 4rem;-->
+<!--            color: #000;-->
+<!--            cursor: pointer;-->
+<!--            transition: all 0.15s ease-out;-->
+<!--            outline: none;-->
+<!--            position: relative;-->
+<!--            box-shadow: 0 10px 0px #1a3a5a;-->
+<!--        }-->
+
+<!--        .mic-circle:active {-->
+<!--            transform: translateY(5px);-->
+<!--            box-shadow: 0 5px 0px #1a3a5a;-->
+<!--        }-->
+
+<!--        .mic-circle.recording {-->
+<!--            background: #ef4444;-->
+<!--            color: white;-->
+<!--            border-color: white;-->
+<!--            transform: scale(1.1);-->
+<!--            box-shadow: 0 0 30px rgba(239, 68, 68, 0.6);-->
+<!--        }-->
+
+<!--        .mic-circle.recording::before,-->
+<!--        .mic-circle.recording::after {-->
+<!--            content: '';-->
+<!--            position: absolute;-->
+<!--            width: 100%; height: 100%;-->
+<!--            border-radius: 50%;-->
+<!--            border: 2px solid #ef4444;-->
+<!--            animation: ripple 1.2s infinite ease-out;-->
+<!--            opacity: 0;-->
+<!--        }-->
+
+<!--        .mic-circle.recording::after { animation-delay: 0.6s; }-->
+
+<!--        @keyframes ripple {-->
+<!--            0% { transform: scale(1); opacity: 0.8; }-->
+<!--            100% { transform: scale(1.8); opacity: 0; }-->
+<!--        }-->
+
+<!--        .status-badge {-->
+<!--            background: #facc15;-->
+<!--            padding: 4px 15px;-->
+<!--            border-radius: 20px;-->
+<!--            font-weight: 800;-->
+<!--            font-size: 0.75rem;-->
+<!--            text-transform: uppercase;-->
+<!--            margin-bottom: 10px;-->
+<!--            display: inline-block;-->
+<!--        }-->
+
+<!--        .info-text { font-size: 1.1rem; font-weight: 500; margin-bottom: 4px; color: #000; }-->
+<!--        .bold-val { font-weight: 800; }-->
+<!--    </style>-->
+<!--</head>-->
+<!--<body>-->
+
+<!--    <div id="sidebar">-->
+<!--        <div class="p-8 border-b border-white/10">-->
+<!--            <h2 class="text-xl font-extrabold italic uppercase">Bisaya Tongue</h2>-->
+<!--            <p class="text-cyan-400 font-bold mt-1">@{{ user }}</p>-->
+<!--        </div>-->
+<!--        <nav class="mt-4 p-4 space-y-2">-->
+<!--            <div class="bg-white/5 p-4 rounded-xl">-->
+<!--                <p class="text-xs text-slate-400 uppercase font-black">Pre-test Avg</p>-->
+<!--                <p id="pre-score" class="font-bold text-xl">0%</p>-->
+<!--            </div>-->
+<!--            <div class="bg-white/5 p-4 rounded-xl">-->
+<!--                <p class="text-xs text-slate-400 uppercase font-black">Latest Accuracy</p>-->
+<!--                <p id="curr-acc" class="font-bold text-xl">0%</p>-->
+<!--            </div>-->
+<!--            <a href="/logout" class="block p-4 text-red-400 hover:bg-red-500/10 rounded-xl mt-10 transition">-->
+<!--                <i class="fas fa-power-off mr-3"></i> Logout Session-->
+<!--            </a>-->
+<!--        </nav>-->
+<!--    </div>-->
+
+<!--    <div class="overlay" id="overlay" onclick="toggleSidebar()"></div>-->
+<!--    <div class="menu-trigger" onclick="toggleSidebar()"><i class="fas fa-bars"></i></div>-->
+
+<!--    <main class="w-full h-full pt-10 flex flex-col items-center">-->
+<!--        <div id="phase-badge" class="status-badge">Initializing...</div>-->
+
+<!--        <div class="mb-8 text-center">-->
+<!--            <p class="info-text">Level: <span id="lvl-name" class="bold-val">-&#45;&#45;</span></p>-->
+<!--            <p class="info-text">Target: <span id="target" class="bold-val">-&#45;&#45;</span></p>-->
+<!--            <p class="info-text">Hint: <span id="hint" class="bold-val">-&#45;&#45;</span></p>-->
+<!--            <p class="info-text">AI Accuracy: <span id="acc-display" class="bold-val text-red-700">0%</span></p>-->
+<!--        </div>-->
+
+<!--        <div class="practice-card">-->
+<!--            <div id="feedback" class="h-6 text-yellow-300 font-bold mb-4 uppercase text-xs tracking-widest text-center px-4"></div>-->
+<!--            <button id="mic" class="mic-circle"><i class="fas fa-microphone"></i></button>-->
+<!--            <p id="instruction" class="mt-10 text-xs uppercase font-black tracking-[0.3em] text-slate-300 transition-all">Hold to Speak</p>-->
+<!--        </div>-->
+<!--    </main>-->
+
+<!--    <script>-->
+<!--        const USER_ID = "{{ user }}";-->
+<!--        const KEY = `bisaya_v3_${USER_ID}`;-->
+
+<!--        const modules = [-->
+<!--            { name: "Foundation: Vowels", words: ["A", "E", "I", "O", "U"], hints: ["ah", "eh", "ee", "oh", "oo"] },-->
+<!--            { name: "Level 1: Mga Kolor", words: ["Pula", "Asul", "Dalag", "Berde", "Puti"], hints: ["Red", "Blue", "Yellow", "Green", "White"] },-->
+<!--            { name: "Level 2: Mga Hayop", words: ["Iro", "Iring", "Manok", "Baka", "Baboy"], hints: ["Dog", "Cat", "Chicken", "Cow", "Pig"] },-->
+<!--            { name: "Level 3: Bahin sa Lawas", words: ["Ulo", "Kamot", "Tuhod", "Sapa", "Dunggan"], hints: ["Head", "Hand", "Knee", "Foot", "Ear"] }-->
+<!--        ];-->
+
+<!--        let state = JSON.parse(localStorage.getItem(KEY)) || {-->
+<!--            curMod: 0, curIdx: 0, phase: 'learning',-->
+<!--            preTestData: [], postTestData: [],-->
+<!--            preAvg: 0, postAvg: 0,-->
+<!--            testItems: []-->
+<!--        };-->
+
+<!--        function toggleSidebar() {-->
+<!--            document.getElementById('sidebar').classList.toggle('open');-->
+<!--            document.getElementById('overlay').classList.toggle('show');-->
+<!--            document.getElementById('pre-score').innerText = state.preAvg + "%";-->
+<!--        }-->
+
+<!--        function generateTestItems() {-->
+<!--            let pool = [];-->
+<!--            modules.slice(1).forEach(m => pool.push(...m.words));-->
+<!--            return pool.sort(() => 0.5 - Math.random()).slice(0, 10);-->
+<!--        }-->
+
+<!--        function updateUI() {-->
+<!--            const badge = document.getElementById('phase-badge');-->
+
+<!--            if (state.phase === 'pretest') {-->
+<!--                badge.innerText = "Pre-test (Diagnostic)";-->
+<!--                badge.style.background = "#facc15";-->
+<!--                if (!state.testItems || state.testItems.length === 0) state.testItems = generateTestItems();-->
+<!--                document.getElementById('lvl-name').innerText = "Diagnostic";-->
+<!--                document.getElementById('target').innerText = state.testItems[state.curIdx];-->
+<!--                document.getElementById('hint').innerText = "Attempt the word";-->
+<!--            }-->
+<!--            else if (state.phase === 'posttest') {-->
+<!--                badge.innerText = "Post-test (Final)";-->
+<!--                badge.style.background = "#22c55e";-->
+<!--                document.getElementById('lvl-name').innerText = "Final Review";-->
+<!--                document.getElementById('target').innerText = state.testItems[state.curIdx];-->
+<!--                document.getElementById('hint').innerText = "Last assessment";-->
+<!--            }-->
+<!--            else {-->
+<!--                badge.innerText = "Learning Mode";-->
+<!--                badge.style.background = "#fff";-->
+<!--                let m = modules[state.curMod];-->
+<!--                document.getElementById('lvl-name').innerText = m.name;-->
+<!--                document.getElementById('target').innerText = m.words[state.curIdx];-->
+<!--                document.getElementById('hint').innerText = m.hints[state.curIdx];-->
+<!--            }-->
+
+<!--            document.getElementById('pre-score').innerText = state.preAvg + "%";-->
+<!--            localStorage.setItem(KEY, JSON.stringify(state));-->
+<!--        }-->
+
+<!--        async function handleResult(data) {-->
+<!--            const acc = data.accuracy;-->
+<!--            document.getElementById('acc-display').innerText = acc + "%";-->
+<!--            document.getElementById('curr-acc').innerText = acc + "%";-->
+
+<!--            if (acc < 30) {-->
+<!--                document.getElementById('feedback').innerText = "Not quite! Try again.";-->
+<!--                return;-->
+<!--            }-->
+
+<!--            if (state.phase === 'pretest') {-->
+<!--                state.preTestData.push(acc);-->
+<!--                state.curIdx++;-->
+<!--                if (state.curIdx >= 10) {-->
+<!--                    state.preAvg = Math.round(state.preTestData.reduce((a,b)=>a+b)/10);-->
+<!--                    state.phase = 'learning'; state.curMod = 1; state.curIdx = 0;-->
+<!--                    alert(`Pre-test complete! Baseline: ${state.preAvg}%`);-->
+<!--                }-->
+<!--            }-->
+<!--            else if (state.phase === 'learning') {-->
+<!--                if (acc >= 70) {-->
+<!--                    state.curIdx++;-->
+<!--                    if (state.curIdx >= modules[state.curMod].words.length) {-->
+<!--                        state.curIdx = 0;-->
+<!--                        state.curMod++;-->
+<!--                    }-->
+<!--                    if (state.curMod === 1 && state.curIdx === 0 && state.preTestData.length === 0) {-->
+<!--                        state.phase = 'pretest';-->
+<!--                    }-->
+<!--                    if (state.curMod >= modules.length) {-->
+<!--                        state.phase = 'posttest'; state.curIdx = 0;-->
+<!--                        state.testItems = generateTestItems();-->
+<!--                    }-->
+<!--                } else {-->
+<!--                    document.getElementById('feedback').innerText = "Close! Aim for 70%+";-->
+<!--                }-->
+<!--            }-->
+<!--            else if (state.phase === 'posttest') {-->
+<!--                state.postTestData.push(acc);-->
+<!--                state.curIdx++;-->
+<!--                if (state.curIdx >= 10) {-->
+<!--                    state.postAvg = Math.round(state.postTestData.reduce((a,b)=>a+b)/10);-->
+<!--                    if (state.postAvg < 75) {-->
+<!--                        alert(`Post-test: ${state.postAvg}%. Returning to Level 1 for review.`);-->
+<!--                        state.phase = 'learning'; state.curMod = 1; state.curIdx = 0; state.postTestData = [];-->
+<!--                    } else {-->
+<!--                        alert(`Congratulations! You passed with ${state.postAvg}%!`);-->
+<!--                    }-->
+<!--                }-->
+<!--            }-->
+<!--            updateUI();-->
+<!--        }-->
+
+<!--        // -&#45;&#45; MIC INTERACTIVITY -&#45;&#45;-->
+<!--        const micBtn = document.getElementById('mic');-->
+<!--        const instruction = document.getElementById('instruction');-->
+<!--        let mediaRec;-->
+
+<!--        const startRecording = async () => {-->
+<!--            micBtn.classList.add('recording');-->
+<!--            instruction.innerText = "Listening...";-->
+<!--            instruction.style.color = "#ef4444";-->
+<!--            document.getElementById('feedback').innerText = "";-->
+
+<!--            try {-->
+<!--                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });-->
+<!--                mediaRec = new MediaRecorder(stream);-->
+<!--                let chunks = [];-->
+<!--                mediaRec.ondataavailable = e => chunks.push(e.data);-->
+<!--                mediaRec.onstop = async () => {-->
+<!--                    const blob = new Blob(chunks, { type: 'audio/wav' });-->
+<!--                    const fd = new FormData();-->
+<!--                    let target = (state.phase === 'learning') ? modules[state.curMod].words[state.curIdx] : state.testItems[state.curIdx];-->
+
+<!--                    fd.append('audio', blob);-->
+<!--                    fd.append('target', target);-->
+<!--                    fd.append('test_type', state.phase);-->
+
+<!--                    document.getElementById('feedback').innerText = "Processing...";-->
+<!--                    const res = await fetch('/analyze', { method: 'POST', body: fd });-->
+<!--                    handleResult(await res.json());-->
+<!--                };-->
+<!--                mediaRec.start();-->
+<!--            } catch (e) {-->
+<!--                alert("Microphone required.");-->
+<!--                stopRecording();-->
+<!--            }-->
+<!--        };-->
+
+<!--        const stopRecording = () => {-->
+<!--            micBtn.classList.remove('recording');-->
+<!--            instruction.innerText = "Hold to Speak";-->
+<!--            instruction.style.color = "#cbd5e1";-->
+<!--            if(mediaRec && mediaRec.state === "recording") mediaRec.stop();-->
+<!--        };-->
+
+<!--        micBtn.onmousedown = startRecording;-->
+<!--        window.onmouseup = stopRecording;-->
+<!--        micBtn.ontouchstart = (e) => { e.preventDefault(); startRecording(); };-->
+<!--        micBtn.ontouchend = (e) => { e.preventDefault(); stopRecording(); };-->
+
+<!--        updateUI();-->
+<!--    </script>-->
+<!--</body>-->
+<!--</html>-->

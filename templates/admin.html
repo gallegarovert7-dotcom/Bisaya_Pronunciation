@@ -1,0 +1,985 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard | Bisaya Tongue Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { background-color: #0f172a; font-family: 'Inter', sans-serif; color: white; }
+        .glass-card { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; backdrop-filter: blur(10px); }
+        .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 50; align-items: center; justify-content: center; padding: 20px; }
+        .modal.active { display: flex; }
+        #historyContent::-webkit-scrollbar { width: 5px; }
+        #historyContent::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div id="historyModal" class="modal">
+        <div class="glass-card w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col p-6 shadow-2xl">
+            <div class="flex justify-between items-center mb-6 border-b border-white/10 pb-4">
+                <div>
+                    <h2 id="modalTitle" class="text-2xl font-black uppercase italic tracking-tight text-cyan-400">Student Practice Logs</h2>
+                    <p class="text-slate-400 text-[10px] font-bold uppercase tracking-widest">Source: user_scores table</p>
+                </div>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-white transition text-3xl">&times;</button>
+            </div>
+
+            <div id="historyContent" class="overflow-y-auto space-y-3 pr-2">
+                </div>
+        </div>
+    </div>
+
+    <div class="max-w-6xl mx-auto">
+        <header class="flex justify-between items-center mb-12">
+            <div>
+                <h1 class="text-4xl font-black italic uppercase tracking-tighter text-white">Admin Dashboard</h1>
+                <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 bg-cyan-500 rounded-full animate-ping"></span>
+                    <p class="text-slate-400 font-bold text-xs uppercase tracking-widest">Practice Monitoring</p>
+                </div>
+            </div>
+            <a href="/logout" class="bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white border border-red-500/50 px-6 py-2 rounded-xl text-xs font-black transition-all">
+                LOGOUT
+            </a>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-12">
+            <div class="glass-card p-8 border-l-4 border-l-cyan-500">
+                <p class="text-[10px] font-black uppercase text-slate-400 mb-1">Total Students</p>
+                <h2 id="total-students" class="text-6xl font-black italic">0</h2>
+            </div>
+            <div class="glass-card p-8 border-l-4 border-l-purple-500">
+                <p class="text-[10px] font-black uppercase text-slate-400 mb-1">Avg Practice Accuracy</p>
+                <h2 id="avg-accuracy" class="text-6xl font-black italic text-purple-400">0%</h2>
+            </div>
+        </div>
+
+        <div class="glass-card overflow-hidden">
+            <div class="bg-white/5 p-6 border-b border-white/10">
+                <h3 class="text-lg font-black uppercase tracking-tight flex items-center gap-3">
+                    <i class="fas fa-user-graduate text-cyan-400"></i> Registered Learners
+                </h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left">
+                    <thead class="bg-black/20">
+                        <tr class="text-slate-400 text-[10px] uppercase font-black tracking-widest">
+                            <th class="py-4 px-6">Username</th>
+                            <th class="py-4 px-6 text-center">Avg Score</th>
+                            <th class="py-4 px-6 text-right">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="student-list" class="divide-y divide-white/5">
+                        <tr><td colspan="3" class="py-20 text-center text-slate-500 font-bold uppercase italic">Syncing Practice Data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 1. Fetch Practice Summary (from user_scores)
+        async function fetchSummary() {
+            try {
+                const response = await fetch('/get_admin_summary');
+                const data = await response.json();
+
+                const list = document.getElementById('student-list');
+                const totalDisplay = document.getElementById('total-students');
+                const avgDisplay = document.getElementById('avg-accuracy');
+
+                list.innerHTML = "";
+                if (!data || data.length === 0) {
+                    list.innerHTML = `<tr><td colspan="3" class="py-20 text-center">No student scores recorded.</td></tr>`;
+                    return;
+                }
+
+                let totalAcc = 0;
+                let activeStudents = 0;
+
+                data.forEach(student => {
+                    const avg = student.avg_accuracy ? Math.round(student.avg_accuracy) : 0;
+                    if(student.avg_accuracy) { totalAcc += avg; activeStudents++; }
+
+                    list.innerHTML += `
+                        <tr class="hover:bg-white/5 transition">
+                            <td class="py-5 px-6 font-black text-cyan-400 font-mono italic text-lg">@${student.username}</td>
+                            <td class="py-5 px-6 text-center">
+                                <span class="text-3xl font-black ${avg >= 75 ? 'text-green-400' : 'text-yellow-500'}">${avg}%</span>
+                            </td>
+                            <td class="py-5 px-6 text-right">
+                                <button onclick="viewHistory(${student.id}, '${student.username}')"
+                                        class="bg-white text-black hover:bg-cyan-400 px-6 py-2 rounded-lg text-[10px] font-black transition-all uppercase shadow-lg">
+                                    Analyze Practice
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                });
+
+                totalDisplay.innerText = data.length;
+                avgDisplay.innerText = activeStudents > 0 ? Math.round(totalAcc / activeStudents) + "%" : "0%";
+            } catch (err) { console.error("Database Sync Error:", err); }
+        }
+
+        // 2. Fetch Detailed Practice History (user_scores table)
+        async function viewHistory(studentId, username) {
+            const modal = document.getElementById('historyModal');
+            const content = document.getElementById('historyContent');
+            const title = document.getElementById('modalTitle');
+
+            title.innerText = `@${username}`;
+            content.innerHTML = `<div class="py-12 text-center animate-pulse text-slate-500 font-black italic uppercase">Querying user_scores...</div>`;
+            modal.classList.add('active');
+
+            try {
+                const res = await fetch(`/get_student_details/${studentId}`);
+                const history = await res.json();
+
+                if (!history || history.length === 0) {
+                    content.innerHTML = `
+                        <div class="py-20 text-center border-2 border-dashed border-white/5 rounded-3xl">
+                            <i class="fas fa-microphone-slash text-slate-700 text-4xl mb-4"></i>
+                            <p class="text-slate-500 font-bold uppercase text-xs tracking-widest">No practice sessions found for this user.</p>
+                        </div>`;
+                    return;
+                }
+
+                // Map results from user_scores: word, level, accuracy, timestamp
+                content.innerHTML = history.map(item => `
+                    <div class="bg-white/5 p-4 rounded-2xl border border-white/5 flex justify-between items-center group hover:bg-white/10 transition">
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="bg-purple-500 text-[8px] text-white font-black px-2 py-0.5 rounded italic">
+                                    PRACTICE
+                                </span>
+                                <span class="text-[10px] text-slate-500 font-bold uppercase tracking-widest">${item.level}</span>
+                            </div>
+                            <p class="text-xl font-black text-white group-hover:text-cyan-400 transition">${item.word}</p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-2xl font-black ${item.accuracy >= 75 ? 'text-green-400' : 'text-yellow-500'}">${Math.round(item.accuracy)}%</p>
+                            <p class="text-[9px] text-slate-500 font-bold uppercase">${new Date(item.timestamp).toLocaleString()}</p>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (err) {
+                content.innerHTML = `<p class="text-red-500 font-black p-10 text-center uppercase">Error connecting to practice records.</p>`;
+            }
+        }
+
+        function closeModal() { document.getElementById('historyModal').classList.remove('active'); }
+
+        // Initial Sync
+        fetchSummary();
+        // Refresh data every 30 seconds
+        setInterval(fetchSummary, 30000);
+    </script>
+</body>
+</html>
+<!--<!DOCTYPE html>-->
+<!--<html lang="en">-->
+<!--<head>-->
+<!--    <meta charset="UTF-8">-->
+<!--    <meta name="viewport" content="width=device-width, initial-scale=1.0">-->
+<!--    <title>Admin Dashboard | Bisaya Tongue Pro</title>-->
+<!--    <script src="https://cdn.tailwindcss.com"></script>-->
+<!--    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">-->
+
+<!--    <style>-->
+<!--        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;700;800&display=swap');-->
+
+<!--        :root {-->
+<!--            &#45;&#45;bg: #040a14;-->
+<!--            &#45;&#45;cyan: #00d4ff;-->
+<!--            &#45;&#45;text: #e2eeff;-->
+<!--            &#45;&#45;accent-1: #0099cc;-->
+<!--            &#45;&#45;accent-2: #22c55e;-->
+<!--            &#45;&#45;accent-3: #ef4444;-->
+<!--        }-->
+
+<!--        * { margin: 0; padding: 0; box-sizing: border-box; }-->
+
+<!--        body {-->
+<!--            font-family: 'Syne', sans-serif;-->
+<!--            background: linear-gradient(135deg, var(&#45;&#45;bg) 0%, #0a1428 50%, #051018 100%);-->
+<!--            color: var(&#45;&#45;text);-->
+<!--            overflow-x: hidden;-->
+<!--        }-->
+
+<!--        .header {-->
+<!--            background: rgba(10,20,40,0.95);-->
+<!--            border-bottom: 1px solid rgba(0,180,220,0.15);-->
+<!--            backdrop-filter: blur(20px);-->
+<!--            padding: 20px 30px;-->
+<!--            display: flex;-->
+<!--            justify-content: space-between;-->
+<!--            align-items: center;-->
+<!--            box-shadow: 0 4px 20px rgba(0, 212, 255, 0.1);-->
+<!--            flex-wrap: wrap;-->
+<!--        }-->
+
+<!--        .logo {-->
+<!--            display: flex;-->
+<!--            align-items: center;-->
+<!--            gap: 12px;-->
+<!--            font-size: 24px;-->
+<!--            font-weight: 900;-->
+<!--            color: var(&#45;&#45;cyan);-->
+<!--        }-->
+
+<!--        .logo i { font-size: 28px; }-->
+
+<!--        .header-actions {-->
+<!--            display: flex;-->
+<!--            gap: 15px;-->
+<!--            align-items: center;-->
+<!--        }-->
+
+<!--        .btn-logout {-->
+<!--            background: linear-gradient(135deg, #ef4444, #dc2626);-->
+<!--            color: white;-->
+<!--            border: none;-->
+<!--            padding: 10px 20px;-->
+<!--            border-radius: 8px;-->
+<!--            cursor: pointer;-->
+<!--            font-weight: 700;-->
+<!--            transition: all 0.3s ease;-->
+<!--            display: flex;-->
+<!--            align-items: center;-->
+<!--            gap: 8px;-->
+<!--        }-->
+
+<!--        .btn-logout:hover {-->
+<!--            background: linear-gradient(135deg, #dc2626, #b91c1c);-->
+<!--            transform: translateY(-2px);-->
+<!--            box-shadow: 0 8px 20px rgba(239, 68, 68, 0.3);-->
+<!--        }-->
+
+<!--        .container {-->
+<!--            padding: 30px;-->
+<!--            max-width: 1600px;-->
+<!--            margin: 0 auto;-->
+<!--        }-->
+
+<!--        .dashboard-header {-->
+<!--            margin-bottom: 40px;-->
+<!--        }-->
+
+<!--        .dashboard-header h1 {-->
+<!--            font-size: 32px;-->
+<!--            font-weight: 900;-->
+<!--            margin-bottom: 10px;-->
+<!--            background: linear-gradient(135deg, var(&#45;&#45;cyan), #00a8cc);-->
+<!--            -webkit-background-clip: text;-->
+<!--            -webkit-text-fill-color: transparent;-->
+<!--            background-clip: text;-->
+<!--        }-->
+
+<!--        .dashboard-header p {-->
+<!--            color: rgba(226, 238, 255, 0.6);-->
+<!--            font-size: 14px;-->
+<!--        }-->
+
+<!--        .stats-grid {-->
+<!--            display: grid;-->
+<!--            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));-->
+<!--            gap: 20px;-->
+<!--            margin-bottom: 40px;-->
+<!--        }-->
+
+<!--        .stat-card {-->
+<!--            background: rgba(10,20,40,0.7);-->
+<!--            border: 1px solid rgba(0,180,220,0.15);-->
+<!--            backdrop-filter: blur(20px);-->
+<!--            border-radius: 16px;-->
+<!--            padding: 24px;-->
+<!--            transition: all 0.3s ease;-->
+<!--        }-->
+
+<!--        .stat-card:hover {-->
+<!--            border-color: rgba(0,180,220,0.3);-->
+<!--            background: rgba(10,20,40,0.9);-->
+<!--            box-shadow: 0 8px 30px rgba(0, 212, 255, 0.15);-->
+<!--            transform: translateY(-5px);-->
+<!--        }-->
+
+<!--        .stat-label {-->
+<!--            font-size: 12px;-->
+<!--            color: rgba(226, 238, 255, 0.6);-->
+<!--            font-weight: 700;-->
+<!--            text-transform: uppercase;-->
+<!--            letter-spacing: 1px;-->
+<!--            margin-bottom: 12px;-->
+<!--        }-->
+
+<!--        .stat-value {-->
+<!--            font-size: 32px;-->
+<!--            font-weight: 900;-->
+<!--            color: var(&#45;&#45;cyan);-->
+<!--            margin-bottom: 8px;-->
+<!--        }-->
+
+<!--        .stat-subtext {-->
+<!--            font-size: 12px;-->
+<!--            color: rgba(226, 238, 255, 0.4);-->
+<!--        }-->
+
+<!--        .controls {-->
+<!--            display: flex;-->
+<!--            gap: 15px;-->
+<!--            margin-bottom: 30px;-->
+<!--            flex-wrap: wrap;-->
+<!--        }-->
+
+<!--        .search-box {-->
+<!--            flex: 1;-->
+<!--            min-width: 250px;-->
+<!--            background: rgba(10,20,40,0.7);-->
+<!--            border: 1px solid rgba(0,180,220,0.15);-->
+<!--            border-radius: 12px;-->
+<!--            padding: 12px 16px;-->
+<!--            color: var(&#45;&#45;text);-->
+<!--            font-family: 'Syne', sans-serif;-->
+<!--        }-->
+
+<!--        .search-box::placeholder {-->
+<!--            color: rgba(226, 238, 255, 0.3);-->
+<!--        }-->
+
+<!--        .search-box:focus {-->
+<!--            outline: none;-->
+<!--            border-color: var(&#45;&#45;cyan);-->
+<!--            background: rgba(0, 212, 255, 0.06);-->
+<!--            box-shadow: 0 0 20px rgba(0, 212, 255, 0.2);-->
+<!--        }-->
+
+<!--        .filter-btn {-->
+<!--            background: rgba(10,20,40,0.7);-->
+<!--            border: 1px solid rgba(0,180,220,0.15);-->
+<!--            color: var(&#45;&#45;text);-->
+<!--            padding: 12px 20px;-->
+<!--            border-radius: 12px;-->
+<!--            cursor: pointer;-->
+<!--            font-weight: 700;-->
+<!--            transition: all 0.3s ease;-->
+<!--            font-family: 'Syne', sans-serif;-->
+<!--        }-->
+
+<!--        .filter-btn:hover,-->
+<!--        .filter-btn.active {-->
+<!--            background: var(&#45;&#45;accent-1);-->
+<!--            border-color: var(&#45;&#45;cyan);-->
+<!--            color: white;-->
+<!--        }-->
+
+<!--        .table-container {-->
+<!--            background: rgba(10,20,40,0.7);-->
+<!--            border: 1px solid rgba(0,180,220,0.15);-->
+<!--            backdrop-filter: blur(20px);-->
+<!--            border-radius: 16px;-->
+<!--            overflow: hidden;-->
+<!--            box-shadow: 0 8px 30px rgba(0, 212, 255, 0.1);-->
+<!--        }-->
+
+<!--        table {-->
+<!--            width: 100%;-->
+<!--            border-collapse: collapse;-->
+<!--        }-->
+
+<!--        thead {-->
+<!--            background: rgba(0, 180, 220, 0.1);-->
+<!--            border-bottom: 2px solid rgba(0,180,220,0.15);-->
+<!--        }-->
+
+<!--        th {-->
+<!--            padding: 18px 16px;-->
+<!--            text-align: left;-->
+<!--            font-weight: 800;-->
+<!--            font-size: 12px;-->
+<!--            text-transform: uppercase;-->
+<!--            letter-spacing: 1px;-->
+<!--            color: var(&#45;&#45;cyan);-->
+<!--        }-->
+
+<!--        td {-->
+<!--            padding: 16px;-->
+<!--            border-bottom: 1px solid rgba(0,180,220,0.08);-->
+<!--            font-size: 14px;-->
+<!--        }-->
+
+<!--        tbody tr {-->
+<!--            transition: all 0.2s ease;-->
+<!--        }-->
+
+<!--        tbody tr:hover {-->
+<!--            background: rgba(0, 180, 220, 0.05);-->
+<!--        }-->
+
+<!--        tbody tr:last-child td {-->
+<!--            border-bottom: none;-->
+<!--        }-->
+
+<!--        .student-name {-->
+<!--            font-weight: 700;-->
+<!--            color: var(&#45;&#45;cyan);-->
+<!--            display: flex;-->
+<!--            align-items: center;-->
+<!--            gap: 10px;-->
+<!--        }-->
+
+<!--        .student-avatar {-->
+<!--            width: 36px;-->
+<!--            height: 36px;-->
+<!--            border-radius: 50%;-->
+<!--            background: linear-gradient(135deg, var(&#45;&#45;cyan), var(&#45;&#45;accent-1));-->
+<!--            display: flex;-->
+<!--            align-items: center;-->
+<!--            justify-content: center;-->
+<!--            font-weight: 900;-->
+<!--            font-size: 14px;-->
+<!--        }-->
+
+<!--        .level-badge {-->
+<!--            display: inline-block;-->
+<!--            padding: 6px 12px;-->
+<!--            border-radius: 8px;-->
+<!--            font-size: 12px;-->
+<!--            font-weight: 700;-->
+<!--            text-transform: uppercase;-->
+<!--        }-->
+
+<!--        .level-foundation { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }-->
+<!--        .level-1 { background: rgba(168, 85, 247, 0.2); color: #a78bfa; }-->
+<!--        .level-2 { background: rgba(34, 197, 94, 0.2); color: #86efac; }-->
+<!--        .level-3 { background: rgba(249, 115, 22, 0.2); color: #fb923c; }-->
+
+<!--        .accuracy-bar {-->
+<!--            width: 100%;-->
+<!--            height: 6px;-->
+<!--            background: rgba(255,255,255,0.1);-->
+<!--            border-radius: 3px;-->
+<!--            overflow: hidden;-->
+<!--            margin: 6px 0;-->
+<!--        }-->
+
+<!--        .accuracy-fill {-->
+<!--            height: 100%;-->
+<!--            background: linear-gradient(90deg, var(&#45;&#45;accent-2), var(&#45;&#45;cyan));-->
+<!--            border-radius: 3px;-->
+<!--            transition: width 0.3s ease;-->
+<!--        }-->
+
+<!--        .percentage-text {-->
+<!--            font-weight: 700;-->
+<!--            font-size: 12px;-->
+<!--        }-->
+
+<!--        .percentage-high { color: var(&#45;&#45;accent-2); }-->
+<!--        .percentage-medium { color: #fbbf24; }-->
+<!--        .percentage-low { color: var(&#45;&#45;accent-3); }-->
+
+<!--        .action-btn {-->
+<!--            background: rgba(0, 212, 255, 0.2);-->
+<!--            border: 1px solid rgba(0, 212, 255, 0.3);-->
+<!--            color: var(&#45;&#45;cyan);-->
+<!--            padding: 6px 12px;-->
+<!--            border-radius: 6px;-->
+<!--            cursor: pointer;-->
+<!--            font-size: 12px;-->
+<!--            font-weight: 700;-->
+<!--            transition: all 0.2s ease;-->
+<!--            font-family: 'Syne', sans-serif;-->
+<!--        }-->
+
+<!--        .action-btn:hover {-->
+<!--            background: var(&#45;&#45;cyan);-->
+<!--            color: var(&#45;&#45;bg);-->
+<!--            border-color: var(&#45;&#45;cyan);-->
+<!--        }-->
+
+<!--        .modal {-->
+<!--            display: none;-->
+<!--            position: fixed;-->
+<!--            top: 0; left: 0;-->
+<!--            width: 100%; height: 100%;-->
+<!--            background: rgba(0,0,0,0.7);-->
+<!--            z-index: 200;-->
+<!--            align-items: center;-->
+<!--            justify-content: center;-->
+<!--            backdrop-filter: blur(5px);-->
+<!--        }-->
+
+<!--        .modal.show { display: flex; }-->
+
+<!--        .modal-content {-->
+<!--            background: rgba(10,20,40,0.95);-->
+<!--            border: 1px solid rgba(0,180,220,0.15);-->
+<!--            border-radius: 16px;-->
+<!--            padding: 40px;-->
+<!--            max-width: 500px;-->
+<!--            width: 90%;-->
+<!--            box-shadow: 0 20px 60px rgba(0, 212, 255, 0.2);-->
+<!--            position: relative;-->
+<!--            max-height: 80vh;-->
+<!--            overflow-y: auto;-->
+<!--        }-->
+
+<!--        .modal-header {-->
+<!--            font-size: 24px;-->
+<!--            font-weight: 900;-->
+<!--            margin-bottom: 20px;-->
+<!--            color: var(&#45;&#45;cyan);-->
+<!--        }-->
+
+<!--        .modal-stat {-->
+<!--            display: flex;-->
+<!--            justify-content: space-between;-->
+<!--            padding: 12px 0;-->
+<!--            border-bottom: 1px solid rgba(0,180,220,0.08);-->
+<!--            margin-bottom: 12px;-->
+<!--        }-->
+
+<!--        .modal-stat:last-child {-->
+<!--            border-bottom: none;-->
+<!--        }-->
+
+<!--        .modal-label {-->
+<!--            color: rgba(226, 238, 255, 0.6);-->
+<!--            font-size: 12px;-->
+<!--            text-transform: uppercase;-->
+<!--            font-weight: 700;-->
+<!--        }-->
+
+<!--        .modal-value {-->
+<!--            font-weight: 800;-->
+<!--            font-size: 16px;-->
+<!--            color: var(&#45;&#45;cyan);-->
+<!--        }-->
+
+<!--        .modal-close {-->
+<!--            position: absolute;-->
+<!--            top: 20px;-->
+<!--            right: 20px;-->
+<!--            background: none;-->
+<!--            border: none;-->
+<!--            color: var(&#45;&#45;text);-->
+<!--            font-size: 24px;-->
+<!--            cursor: pointer;-->
+<!--            transition: all 0.2s ease;-->
+<!--        }-->
+
+<!--        .modal-close:hover {-->
+<!--            color: var(&#45;&#45;cyan);-->
+<!--            transform: rotate(90deg);-->
+<!--        }-->
+
+<!--        .empty-state {-->
+<!--            text-align: center;-->
+<!--            padding: 60px 20px;-->
+<!--            color: rgba(226, 238, 255, 0.5);-->
+<!--        }-->
+
+<!--        .empty-state i {-->
+<!--            font-size: 48px;-->
+<!--            margin-bottom: 20px;-->
+<!--            opacity: 0.3;-->
+<!--        }-->
+
+<!--        @media (max-width: 768px) {-->
+<!--            .container { padding: 20px; }-->
+<!--            .header { flex-direction: column; gap: 15px; }-->
+<!--            .stats-grid { grid-template-columns: repeat(2, 1fr); }-->
+<!--            .controls { flex-direction: column; }-->
+<!--            .search-box { min-width: 100%; }-->
+<!--            table { font-size: 12px; }-->
+<!--            th, td { padding: 12px 8px; }-->
+<!--        }-->
+<!--    </style>-->
+<!--</head>-->
+<!--<body>-->
+
+<!--    &lt;!&ndash; Header &ndash;&gt;-->
+<!--    <div class="header">-->
+<!--        <div class="logo">-->
+<!--            <i class="fas fa-graduation-cap"></i>-->
+<!--            <span>Bisaya Tongue Admin</span>-->
+<!--        </div>-->
+<!--        <div class="header-actions">-->
+<!--            <div class="text-sm">-->
+<!--                <p class="text-cyan-400 font-bold">Admin Panel</p>-->
+<!--                <p class="text-xs text-slate-500">Monitoring Active</p>-->
+<!--            </div>-->
+<!--            <button onclick="logout()" class="btn-logout">-->
+<!--                <i class="fas fa-sign-out-alt"></i> Logout-->
+<!--            </button>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    &lt;!&ndash; Main Content &ndash;&gt;-->
+<!--    <div class="container">-->
+<!--        &lt;!&ndash; Dashboard Header &ndash;&gt;-->
+<!--        <div class="dashboard-header">-->
+<!--            <h1>Student Performance Dashboard</h1>-->
+<!--            <p>Real-time monitoring of student progress, scores, and accuracy metrics</p>-->
+<!--        </div>-->
+
+<!--        &lt;!&ndash; Stats Overview &ndash;&gt;-->
+<!--        <div class="stats-grid">-->
+<!--            <div class="stat-card">-->
+<!--                <div class="stat-label">Total Students</div>-->
+<!--                <div class="stat-value" id="total-students">0</div>-->
+<!--                <div class="stat-subtext">Active learners</div>-->
+<!--            </div>-->
+<!--            <div class="stat-card">-->
+<!--                <div class="stat-label">Avg Class Score</div>-->
+<!--                <div class="stat-value" id="avg-score">0%</div>-->
+<!--                <div class="stat-subtext">Overall performance</div>-->
+<!--            </div>-->
+<!--            <div class="stat-card">-->
+<!--                <div class="stat-label">Avg Accuracy</div>-->
+<!--                <div class="stat-value" id="avg-accuracy">0%</div>-->
+<!--                <div class="stat-subtext">Speech recognition</div>-->
+<!--            </div>-->
+<!--            <div class="stat-card">-->
+<!--                <div class="stat-label">Active Sessions</div>-->
+<!--                <div class="stat-value" id="active-sessions">0</div>-->
+<!--                <div class="stat-subtext">Currently practicing</div>-->
+<!--            </div>-->
+<!--        </div>-->
+
+<!--        &lt;!&ndash; Controls &ndash;&gt;-->
+<!--        <div class="controls">-->
+<!--            <input type="text" id="search-input" class="search-box" placeholder="Search student by name or username...">-->
+<!--            <button class="filter-btn active" onclick="filterStudents('all')">All Levels</button>-->
+<!--            <button class="filter-btn" onclick="filterStudents('Foundation')">Foundation</button>-->
+<!--            <button class="filter-btn" onclick="filterStudents('Level 1')">Level 1</button>-->
+<!--            <button class="filter-btn" onclick="filterStudents('Level 2')">Level 2</button>-->
+<!--            <button class="filter-btn" onclick="filterStudents('Level 3')">Level 3</button>-->
+<!--        </div>-->
+
+<!--        &lt;!&ndash; Students Table &ndash;&gt;-->
+<!--        <div class="table-container">-->
+<!--            <table id="students-table">-->
+<!--                <thead>-->
+<!--                    <tr>-->
+<!--                        <th>Student Name</th>-->
+<!--                        <th>Current Level</th>-->
+<!--                        <th>Total Score</th>-->
+<!--                        <th>Percentage %</th>-->
+<!--                        <th>Accuracy %</th>-->
+<!--                        <th>Status</th>-->
+<!--                        <th>Action</th>-->
+<!--                    </tr>-->
+<!--                </thead>-->
+<!--                <tbody id="table-body">-->
+<!--                    &lt;!&ndash; Data will be populated here &ndash;&gt;-->
+<!--                </tbody>-->
+<!--            </table>-->
+<!--            <div id="empty-state" class="empty-state" style="display: none;">-->
+<!--                <i class="fas fa-inbox"></i>-->
+<!--                <p>No students found</p>-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    &lt;!&ndash; Student Details Modal &ndash;&gt;-->
+<!--    <div class="modal" id="student-modal">-->
+<!--        <button class="modal-close" onclick="closeModal()">-->
+<!--            <i class="fas fa-times"></i>-->
+<!--        </button>-->
+<!--        <div class="modal-content">-->
+<!--            <div class="modal-header">-->
+<!--                <span id="modal-student-name"></span>-->
+<!--            </div>-->
+<!--            <div id="modal-body">-->
+<!--                &lt;!&ndash; Details will be populated here &ndash;&gt;-->
+<!--            </div>-->
+<!--        </div>-->
+<!--    </div>-->
+
+<!--    <script>-->
+<!--        // ===== AUTH CHECK =====-->
+<!--        function checkAuth() {-->
+<!--            const token = localStorage.getItem('authToken');-->
+<!--            const role = localStorage.getItem('userRole');-->
+
+<!--            if (!token || role !== 'admin') {-->
+<!--                window.location.href = 'login.html';-->
+<!--                return false;-->
+<!--            }-->
+<!--            return true;-->
+<!--        }-->
+
+<!--        function logout() {-->
+<!--            if(confirm('Are you sure you want to logout?')) {-->
+<!--                localStorage.removeItem('authToken');-->
+<!--                localStorage.removeItem('userRole');-->
+<!--                localStorage.removeItem('username');-->
+<!--                window.location.href = 'login.html';-->
+<!--            }-->
+<!--        }-->
+
+<!--        if (!checkAuth()) {-->
+<!--            throw new Error('Unauthorized');-->
+<!--        }-->
+
+<!--        // ===== STUDENT DATA =====-->
+<!--        let allStudents = [-->
+<!--            {-->
+<!--                id: 1,-->
+<!--                name: "Juan Dela Cruz",-->
+<!--                username: "juan_dc",-->
+<!--                level: "Level 2: Mga Hayop",-->
+<!--                totalScore: 1250,-->
+<!--                percentage: 85,-->
+<!--                accuracy: 92,-->
+<!--                status: "active",-->
+<!--                preTestAvg: 65,-->
+<!--                postTestAvg: 88,-->
+<!--                lastActive: "2 mins ago",-->
+<!--                progress: 60-->
+<!--            },-->
+<!--            {-->
+<!--                id: 2,-->
+<!--                name: "Maria Santos",-->
+<!--                username: "maria_s",-->
+<!--                level: "Foundation: Vowels",-->
+<!--                totalScore: 890,-->
+<!--                percentage: 72,-->
+<!--                accuracy: 78,-->
+<!--                status: "active",-->
+<!--                preTestAvg: 55,-->
+<!--                postTestAvg: 75,-->
+<!--                lastActive: "5 mins ago",-->
+<!--                progress: 30-->
+<!--            },-->
+<!--            {-->
+<!--                id: 3,-->
+<!--                name: "Carlos Rodriguez",-->
+<!--                username: "carlos_r",-->
+<!--                level: "Level 3: Bahin sa Lawas",-->
+<!--                totalScore: 1650,-->
+<!--                percentage: 94,-->
+<!--                accuracy: 96,-->
+<!--                status: "idle",-->
+<!--                preTestAvg: 70,-->
+<!--                postTestAvg: 92,-->
+<!--                lastActive: "45 mins ago",-->
+<!--                progress: 95-->
+<!--            },-->
+<!--            {-->
+<!--                id: 4,-->
+<!--                name: "Ana Garcia",-->
+<!--                username: "ana_g",-->
+<!--                level: "Level 1: Mga Kolor",-->
+<!--                totalScore: 950,-->
+<!--                percentage: 76,-->
+<!--                accuracy: 81,-->
+<!--                status: "active",-->
+<!--                preTestAvg: 62,-->
+<!--                postTestAvg: 80,-->
+<!--                lastActive: "1 min ago",-->
+<!--                progress: 45-->
+<!--            },-->
+<!--            {-->
+<!--                id: 5,-->
+<!--                name: "Pedro Reyes",-->
+<!--                username: "pedro_r",-->
+<!--                level: "Level 2: Mga Hayop",-->
+<!--                totalScore: 1120,-->
+<!--                percentage: 82,-->
+<!--                accuracy: 88,-->
+<!--                status: "idle",-->
+<!--                preTestAvg: 68,-->
+<!--                postTestAvg: 85,-->
+<!--                lastActive: "3 hours ago",-->
+<!--                progress: 70-->
+<!--            }-->
+<!--        ];-->
+
+<!--        let filteredStudents = [...allStudents];-->
+<!--        let currentFilter = 'all';-->
+
+<!--        function getLevelClass(level) {-->
+<!--            if (level.includes('Foundation')) return 'level-foundation';-->
+<!--            if (level.includes('Level 1')) return 'level-1';-->
+<!--            if (level.includes('Level 2')) return 'level-2';-->
+<!--            if (level.includes('Level 3')) return 'level-3';-->
+<!--            return 'level-1';-->
+<!--        }-->
+
+<!--        function getStatusBadge(status) {-->
+<!--            if (status === 'active') {-->
+<!--                return `<span style="color: var(&#45;&#45;accent-2); font-weight: 700; font-size: 12px;">● Active</span>`;-->
+<!--            } else {-->
+<!--                return `<span style="color: #a0aec0; font-weight: 700; font-size: 12px;">● Idle</span>`;-->
+<!--            }-->
+<!--        }-->
+
+<!--        function getPercentageClass(percentage) {-->
+<!--            if (percentage >= 80) return 'percentage-high';-->
+<!--            if (percentage >= 60) return 'percentage-medium';-->
+<!--            return 'percentage-low';-->
+<!--        }-->
+
+<!--        function renderTable() {-->
+<!--            const tbody = document.getElementById('table-body');-->
+<!--            const emptyState = document.getElementById('empty-state');-->
+
+<!--            if (filteredStudents.length === 0) {-->
+<!--                tbody.innerHTML = '';-->
+<!--                emptyState.style.display = 'block';-->
+<!--                return;-->
+<!--            }-->
+
+<!--            emptyState.style.display = 'none';-->
+<!--            tbody.innerHTML = filteredStudents.map(student => `-->
+<!--                <tr>-->
+<!--                    <td>-->
+<!--                        <div class="student-name">-->
+<!--                            <div class="student-avatar">${student.name.charAt(0)}</div>-->
+<!--                            <div>-->
+<!--                                <div style="color: var(&#45;&#45;cyan); font-weight: 700;">${student.name}</div>-->
+<!--                                <div style="font-size: 11px; color: rgba(226, 238, 255, 0.4);">@${student.username}</div>-->
+<!--                            </div>-->
+<!--                        </div>-->
+<!--                    </td>-->
+<!--                    <td>-->
+<!--                        <span class="level-badge ${getLevelClass(student.level)}">${student.level.split(': ')[0]}</span>-->
+<!--                    </td>-->
+<!--                    <td>-->
+<!--                        <div style="font-weight: 700; color: var(&#45;&#45;cyan);">${student.totalScore}</div>-->
+<!--                        <div style="font-size: 11px; color: rgba(226, 238, 255, 0.4);">points</div>-->
+<!--                    </td>-->
+<!--                    <td>-->
+<!--                        <div class="percentage-text ${getPercentageClass(student.percentage)}">${student.percentage}%</div>-->
+<!--                        <div class="accuracy-bar">-->
+<!--                            <div class="accuracy-fill" style="width: ${student.percentage}%"></div>-->
+<!--                        </div>-->
+<!--                    </td>-->
+<!--                    <td>-->
+<!--                        <div class="percentage-text ${getPercentageClass(student.accuracy)}">${student.accuracy}%</div>-->
+<!--                        <div class="accuracy-bar">-->
+<!--                            <div class="accuracy-fill" style="width: ${student.accuracy}%"></div>-->
+<!--                        </div>-->
+<!--                    </td>-->
+<!--                    <td>${getStatusBadge(student.status)}</td>-->
+<!--                    <td>-->
+<!--                        <button class="action-btn" onclick="viewStudentDetails(${student.id})">-->
+<!--                            <i class="fas fa-eye"></i> View-->
+<!--                        </button>-->
+<!--                    </td>-->
+<!--                </tr>-->
+<!--            `).join('');-->
+
+<!--            updateStats();-->
+<!--        }-->
+
+<!--        function updateStats() {-->
+<!--            document.getElementById('total-students').innerText = allStudents.length;-->
+<!--            document.getElementById('avg-score').innerText = Math.round(allStudents.reduce((a, b) => a + b.percentage, 0) / allStudents.length) + '%';-->
+<!--            document.getElementById('avg-accuracy').innerText = Math.round(allStudents.reduce((a, b) => a + b.accuracy, 0) / allStudents.length) + '%';-->
+<!--            document.getElementById('active-sessions').innerText = allStudents.filter(s => s.status === 'active').length;-->
+<!--        }-->
+
+<!--        function filterStudents(filter) {-->
+<!--            currentFilter = filter;-->
+<!--            const buttons = document.querySelectorAll('.filter-btn');-->
+<!--            buttons.forEach(btn => btn.classList.remove('active'));-->
+<!--            event.target.classList.add('active');-->
+
+<!--            if (filter === 'all') {-->
+<!--                filteredStudents = [...allStudents];-->
+<!--            } else {-->
+<!--                filteredStudents = allStudents.filter(s => s.level.includes(filter));-->
+<!--            }-->
+
+<!--            searchStudents();-->
+<!--        }-->
+
+<!--        function searchStudents() {-->
+<!--            const searchTerm = document.getElementById('search-input').value.toLowerCase();-->
+<!--            filteredStudents = allStudents.filter(student => {-->
+<!--                const matchesSearch = student.name.toLowerCase().includes(searchTerm) ||-->
+<!--                                     student.username.toLowerCase().includes(searchTerm);-->
+<!--                const matchesFilter = currentFilter === 'all' || student.level.includes(currentFilter);-->
+<!--                return matchesSearch && matchesFilter;-->
+<!--            });-->
+<!--            renderTable();-->
+<!--        }-->
+
+<!--        function viewStudentDetails(studentId) {-->
+<!--            const student = allStudents.find(s => s.id === studentId);-->
+<!--            if (!student) return;-->
+
+<!--            document.getElementById('modal-student-name').innerText = student.name;-->
+<!--            document.getElementById('modal-body').innerHTML = `-->
+<!--                <div class="modal-stat">-->
+<!--                    <span class="modal-label">Username</span>-->
+<!--                    <span class="modal-value">@${student.username}</span>-->
+<!--                </div>-->
+<!--                <div class="modal-stat">-->
+<!--                    <span class="modal-label">Current Level</span>-->
+<!--                    <span class="modal-value">${student.level}</span>-->
+<!--                </div>-->
+<!--                <div class="modal-stat">-->
+<!--                    <span class="modal-label">Total Score</span>-->
+<!--                    <span class="modal-value">${student.totalScore} pts</span>-->
+<!--                </div>-->
+<!--                <div class="modal-stat">-->
+<!--                    <span class="modal-label">Overall Percentage</span>-->
+<!--                    <span class="modal-value" style="color: ${student.percentage >= 80 ? 'var(&#45;&#45;accent-2)' : student.percentage >= 60 ? '#fbbf24' : 'var(&#45;&#45;accent-3)'}">${student.percentage}%</span>-->
+<!--                </div>-->
+<!--                <div class="modal-stat">-->
+<!--                    <span class="modal-label">Speech Accuracy</span>-->
+<!--                    <span class="modal-value" style="color: ${student.accuracy >= 80 ? 'var(&#45;&#45;accent-2)' : student.accuracy >= 60 ? '#fbbf24' : 'var(&#45;&#45;accent-3)'}">${student.accuracy}%</span>-->
+<!--                </div>-->
+<!--                <div class="modal-stat">-->
+<!--                    <span class="modal-label">Pre-Test Average</span>-->
+<!--                    <span class="modal-value">${student.preTestAvg}%</span>-->
+<!--                </div>-->
+<!--                <div class="modal-stat">-->
+<!--                    <span class="modal-label">Post-Test Average</span>-->
+<!--                    <span class="modal-value">${student.postTestAvg}%</span>-->
+<!--                </div>-->
+<!--                <div class="modal-stat">-->
+<!--                    <span class="modal-label">Progress</span>-->
+<!--                    <span class="modal-value">${student.progress}%</span>-->
+<!--                </div>-->
+<!--                <div class="modal-stat">-->
+<!--                    <span class="modal-label">Last Active</span>-->
+<!--                    <span class="modal-value">${student.lastActive}</span>-->
+<!--                </div>-->
+<!--                <div class="modal-stat">-->
+<!--                    <span class="modal-label">Status</span>-->
+<!--                    <span class="modal-value" style="color: ${student.status === 'active' ? 'var(&#45;&#45;accent-2)' : '#a0aec0'}">${student.status.charAt(0).toUpperCase() + student.status.slice(1)}</span>-->
+<!--                </div>-->
+<!--            `;-->
+
+<!--            document.getElementById('student-modal').classList.add('show');-->
+<!--        }-->
+
+<!--        function closeModal() {-->
+<!--            document.getElementById('student-modal').classList.remove('show');-->
+<!--        }-->
+
+<!--        // Event Listeners-->
+<!--        document.getElementById('search-input').addEventListener('input', searchStudents);-->
+
+<!--        window.onclick = (event) => {-->
+<!--            const modal = document.getElementById('student-modal');-->
+<!--            if (event.target === modal) {-->
+<!--                closeModal();-->
+<!--            }-->
+<!--        };-->
+
+<!--        // Initialize-->
+<!--        renderTable();-->
+<!--    </script>-->
+<!--</body>-->
+<!--</html>-->

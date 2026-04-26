@@ -1,0 +1,7 @@
+flask
+flask-cors
+openai-whisper
+torch
+setuptools-rust
+werkzeug
+gunicorn

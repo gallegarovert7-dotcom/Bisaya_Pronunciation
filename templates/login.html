@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login | Bisaya Tongue Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="manifest" href="/static/manifest.json">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='icon.png') }}">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+        body { background-color: #2b6092; font-family: 'Inter', sans-serif; height: 100vh; display: flex; align-items: center; justify-content: center; margin: 0; }
+        .login-card { background: #165a7a; border: 4px solid #000; border-radius: 50px; width: 380px; padding: 40px; box-shadow: 0 20px 0px #1a3a5a; text-align: center; }
+        .input-field { background: #2b6092; border: 3px solid #000; border-radius: 20px; width: 100%; padding: 15px; color: white; font-weight: 800; outline: none; margin-bottom: 15px; transition: 0.2s; }
+        .input-field:disabled { background: #1a3a5a; color: #facc15; cursor: not-allowed; opacity: 0.8; }
+        .btn-login { background: #facc15; border: 3px solid #000; border-radius: 20px; width: 100%; padding: 15px; font-weight: 800; text-transform: uppercase; cursor: pointer; box-shadow: 0 8px 0px #1a3a5a; transition: 0.1s; }
+        .btn-login:active { transform: translateY(4px); box-shadow: 0 4px 0px #1a3a5a; }
+        .logo-box { background: #2b6092; border: 4px solid #000; width: 80px; height: 80px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; margin: 0 auto 20px; }
+        .role-badge { background: #000; color: #facc15; padding: 4px 12px; border-radius: 10px; font-size: 10px; font-weight: 900; letter-spacing: 1px; display: inline-block; margin-bottom: 20px; transition: 0.3s; }
+        .toggle-link { color: #facc15; font-size: 11px; font-weight: 800; cursor: pointer; text-decoration: underline; text-transform: uppercase; }
+    </style>
+</head>
+<body>
+
+    <div class="login-card">
+        <div class="logo-box">🫦</div>
+        <h1 class="text-white text-2xl font-extrabold italic uppercase mb-1">Learning Lab</h1>
+
+        <div id="role-display" class="role-badge">STUDENT PORTAL</div>
+
+        <form id="loginForm">
+            <div id="user-group">
+                <div class="text-left mb-1 ml-2"><label class="text-[10px] font-black text-slate-300 uppercase">Username</label></div>
+                <input type="text" id="username" class="input-field w-full" placeholder="Enter username..." required>
+            </div>
+
+            <div class="text-left mb-1 ml-2"><label class="text-[10px] font-black text-slate-300 uppercase">Password</label></div>
+            <input type="password" id="password" class="input-field w-full" placeholder="••••••••" required>
+
+            <button type="submit" id="submit-btn" class="btn-login w-full mt-4">Enter Lab <i class="fas fa-arrow-right ml-2"></i></button>
+        </form>
+
+        <div class="mt-8 pt-4 border-t border-white/10 flex flex-col gap-3">
+            <div id="reg-option">
+                <span class="text-white text-[11px]">New student? </span>
+                <span class="toggle-link" onclick="toggleAuth()">Register</span>
+            </div>
+            <div>
+                <span class="text-white/50 text-[10px] uppercase font-bold">Switch to: </span>
+                <span id="role-toggle" class="toggle-link text-cyan-400" onclick="switchRole()">Admin Portal</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let isRegisterMode = false;
+        let currentRole = 'student';
+
+        function switchRole() {
+            // Revert registration mode if active
+            if(isRegisterMode) toggleAuth();
+
+            currentRole = (currentRole === 'student') ? 'admin' : 'student';
+
+            const roleDisplay = document.getElementById('role-display');
+            const roleToggle = document.getElementById('role-toggle');
+            const usernameInput = document.getElementById('username');
+            const regOption = document.getElementById('reg-option');
+
+            if(currentRole === 'admin') {
+                roleDisplay.innerText = "ADMIN ACCESS";
+                roleDisplay.style.color = "#22c55e";
+                roleToggle.innerText = "Student Portal";
+
+                // Set default Admin username and lock it
+                usernameInput.value = "admin";
+                usernameInput.disabled = true;
+                regOption.classList.add('hidden');
+                document.getElementById('password').focus();
+            } else {
+                roleDisplay.innerText = "STUDENT PORTAL";
+                roleDisplay.style.color = "#facc15";
+                roleToggle.innerText = "Admin Portal";
+
+                // Unlock and clear for Student
+                usernameInput.value = "";
+                usernameInput.disabled = false;
+                regOption.classList.remove('hidden');
+            }
+        }
+
+        function toggleAuth() {
+            isRegisterMode = !isRegisterMode;
+            document.getElementById('role-display').innerText = isRegisterMode ? "NEW REGISTRATION" : "STUDENT PORTAL";
+            document.getElementById('submit-btn').innerText = isRegisterMode ? "Create Account" : "Enter Lab";
+            document.getElementById('username').placeholder = isRegisterMode ? "Choose a username" : "Enter username...";
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            // Note: .value works even if disabled
+            const username = document.getElementById('username').value.trim();
+            const password = document.getElementById('password').value;
+            const endpoint = isRegisterMode ? '/auth/register' : '/auth/login';
+
+            try {
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    if (isRegisterMode) {
+                        alert("Student account created!");
+                        toggleAuth();
+                    } else {
+                        localStorage.setItem('bisaya_current_user', data.username);
+                        window.location.href = (data.role === 'admin') ? '/admin.html' : '/Student.html';
+                    }
+                } else {
+                    alert(data.error || "Login Failed");
+                }
+            } catch (err) {
+                alert("Server Connection Error.");
+            }
+        });
+    </script>
+</body>
+</html>
